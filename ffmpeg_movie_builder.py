@@ -38,7 +38,7 @@ class Task():
 
 class ImageGenerateTask(Task):
   def __init__(self, text, 
-               size="640x480",
+               size="1024x768",
                background="black",
                font="Dejavu-Sans-Book",
                foreground="white",
@@ -70,8 +70,9 @@ class MovieConvertTask(Task):
   def run(self):
     command = ["ffmpeg",
                "-i", self.input,
-               "-q:a", "1",
-               "-q:v", "1",
+               "-sameq",
+               # "-q:a", "1",
+               # "-q:v", "1",
                "-r", "30",
                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
                self.output]
@@ -96,6 +97,7 @@ class MovieGenerateTask(Task):
     command2 = ["ffmpeg",
                 "-r", "30",
                 "-i", self.output_prefix + "_%d.png",
+                "-sameq",
                 self.output]
     print green("generating movie from images: -> %s"
                 % (self.output))
@@ -111,6 +113,10 @@ def main():
   image_generate_tasks = []               #string -> image
   movie_generate_tasks = []               #image -> movie
   movie_convert_tasks = []
+  # check args
+  if len(argv) <= 1 or len(argv) % 2 == 0 or "-h" in argv or "--help" in argv:
+    usage()
+    sys.exit(1)
   while True:
     if len(argv) == 1:
       # output
@@ -123,7 +129,7 @@ def main():
         movie_convert_tasks.append(MovieConvertTask(option_arg))
         movie_files.append(movie_convert_tasks[-1].output)
       elif option == "-c":
-        image_generate_tasks.append(ImageGenerateTask("hello world"))
+        image_generate_tasks.append(ImageGenerateTask(option_arg))
         movie_generate_tasks.append(MovieGenerateTask(
           image_generate_tasks[-1].output))
         movie_files.append(movie_generate_tasks[-1].output)
@@ -137,6 +143,8 @@ def main():
     i.run()
   for i in movie_convert_tasks:
     i.run()
+  if os.path.exists(output):
+    os.remove(output)
   command = "cat %s | ffmpeg -f mpeg -i - -sameq -vcodec mpeg4 %s" % (" ".join(movie_files), output)
   subprocess.check_call(["sh", "-c", command])
 if __name__ == "__main__":
