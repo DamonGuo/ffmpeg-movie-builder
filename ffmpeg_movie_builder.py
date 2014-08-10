@@ -1,8 +1,16 @@
 #!/usr/bin/env python
+
+__doc__ = """
+
+"""
+
+from multiprocessing import Pool
 import subprocess
 import os, sys
 import tempfile
 
+###########################################################
+# utility function to colorize terminal output
 def getcolor(colorname):
     colors = {
         'clear': '\033[0m',
@@ -28,6 +36,7 @@ blue   = getcolor('blue')
 purple = getcolor('purple')
 cyan   = getcolor('cyan')
 white  = getcolor('white')
+############################################################
 
 class Task():
   def run(self):
@@ -37,6 +46,9 @@ class Task():
     subprocess.check_call(commands)
 
 class ImageGenerateTask(Task):
+  """
+  Generate an image from caption string
+  """
   def __init__(self, text, 
                size="1024x768",
                background="black",
@@ -106,6 +118,10 @@ class MovieGenerateTask(Task):
 def usage():
   print "ffmpeg_builder.py [-m|c|i] arg0 [-m|c|i] arg1 ... output"
 
+def runWrap(obj):
+  return obj.run()
+
+  
 def main():
   argv = sys.argv[1:]
   # parse argv in the order
@@ -137,15 +153,14 @@ def main():
         movie_generate_tasks.append(MovieGenerateTask(option_arg))
         movie_files.append(movie_generate_tasks[-1].output)
       argv = argv[2:]
-  for i in image_generate_tasks:
-    i.run()
-  for i in movie_generate_tasks:
-    i.run()
-  for i in movie_convert_tasks:
-    i.run()
+  pool = Pool(8)
+  pool.map(runWrap, image_generate_tasks)
+  pool.map(runWrap, movie_generate_tasks)
+  pool.map(runWrap, movie_convert_tasks)
   if os.path.exists(output):
     os.remove(output)
   command = "cat %s | ffmpeg -f mpeg -i - -sameq -vcodec mpeg4 %s" % (" ".join(movie_files), output)
   subprocess.check_call(["sh", "-c", command])
+  
 if __name__ == "__main__":
   main()
