@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 __doc__ = """
-
+a script to generate and concatenate movies with titles.
 """
 
 from multiprocessing import Pool
+import argparse
 import subprocess
 import os, sys
 import tempfile
@@ -37,6 +38,12 @@ purple = getcolor('purple')
 cyan   = getcolor('cyan')
 white  = getcolor('white')
 ############################################################
+
+def generateParser():
+  parser = argparse.ArgumentParser(
+    "a script to generate and concatenate movies with titles")
+  return parser
+  
 
 class Task():
   def run(self):
@@ -76,6 +83,9 @@ class ImageGenerateTask(Task):
     self.exec_command(command)
 
 class MovieConvertTask(Task):
+  """
+  a task to convert movie to mpeg1 movie
+  """
   def __init__(self, input):
     self.input = input
     self.output = tempfile.mktemp(".mpg")
@@ -92,11 +102,15 @@ class MovieConvertTask(Task):
     self.exec_command(command)
     
 class MovieGenerateTask(Task):
+  """
+  a task to generate a movie from an image.
+  """
   def __init__(self, input, duration = 4.0):
     self.output_prefix = tempfile.mktemp()
     self.input = input
     # png...?
-    self.mid_images = [self.output_prefix + ("_%d.png" % (i)) for i in range(int(duration * 30))]
+    self.mid_images = [self.output_prefix + ("_%d.png" % (i)) 
+                       for i in range(int(duration * 30))]
     self.output = self.output_prefix + ".mpg"
     self.duration = duration
   def run(self):
@@ -119,6 +133,10 @@ def usage():
   print "ffmpeg_builder.py [-m|c|i] arg0 [-m|c|i] arg1 ... output"
 
 def runWrap(obj):
+  """
+  a function to wrap Task.run method to call from
+  Pool.map
+  """
   return obj.run()
 
   
