@@ -3,8 +3,7 @@
 __doc__ = """
 a script to generate and concatenate movies with titles.
 """
-
-from multiprocessing import Pool
+from compiler.ast import flatten
 import argparse
 import subprocess
 import os, sys
@@ -38,6 +37,44 @@ purple = getcolor('purple')
 cyan   = getcolor('cyan')
 white  = getcolor('white')
 ############################################################
+
+def queryYesNo(question, default="yes"):
+    """Ask a yes/no question via raw_input() and return their answer.
+
+    "question" is a string that is presented to the user.
+    "default" is the presumed answer if the user just hits <Enter>.
+        It must be "yes" (the default), "no" or None (meaning
+        an answer is required of the user).
+
+    The "answer" return value is one of "yes" or "no".
+    """
+    valid = {"yes": True, "y": True, "ye": True,
+             "no": False, "n": False}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == "yes":
+        prompt = " [Y/n] "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = raw_input().lower()
+        if default is not None and choice == '':
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            sys.stdout.write("Please respond with 'yes' or 'no' "
+                             "(or 'y' or 'n').\n")
+
+
+try:
+    import yaml
+except:
+    print red("if you want to read configs from yaml file, please install pyyaml")
 
 def generateParser():
   parser = argparse.ArgumentParser(
@@ -128,9 +165,41 @@ class MovieGenerateTask(Task):
     print green("generating movie from images: -> %s"
                 % (self.output))
     self.exec_command(command2)
+
+
     
+class Config():
+  """
+  config looks like
+  - type: movie
+    input: foo.mp4
+  - type: string
+    string: "foo"
+  - type: image
+    input: foo.png
+  """
+  def __init__(self, config_type, args):
+    self.config_type = config_type
+    self.args = args
+  def generateTasks(self):
+    if self.config_type == "movie":
+      return [MovieConvertTask(os.path.expanduser(self.args["input"]))]
+    elif self.config_type == "string":
+      image_task = ImageGenerateTask(os.path.expanduser(self.args["string"]))
+      movie_task = MovieGenerateTask(image_task.output)
+      return [image_task, movie_task]
+    elif self.config_type == "image":
+      movie_task = MovieGenerateTask(os.path.expanduser(self.args["input"]))
+      return [movie_task]
+    else:
+      err_message = "unknown config_type: %s" % (self.config_type)
+      print red(err_message)
+      raise Exception(err_message)
+
 def usage():
-  print "ffmpeg_builder.py [-m|c|i] arg0 [-m|c|i] arg1 ... output"
+  print "ffmpeg_movie_builder.py [options] [-m|c|i] arg0 [-m|c|i] arg1 ... output"
+  print "  or"
+  print "ffmpeg_movie_builder.py [options] --config config.yml output"
 
 def runWrap(obj):
   """
@@ -139,7 +208,14 @@ def runWrap(obj):
   """
   return obj.run()
 
-  
+def loadYaml(yaml_file):
+  if os.path.exists(yaml_file):
+    return yaml.load(open(yaml_file))
+  else:
+    message = "failed to find %s" % (yaml_file)
+    print red(message)
+    raise Exception(message)
+
 def main():
   argv = sys.argv[1:]
   # parse argv in the order
@@ -148,35 +224,41 @@ def main():
   movie_generate_tasks = []               #image -> movie
   movie_convert_tasks = []
   # check args
-  if len(argv) <= 1 or len(argv) % 2 == 0 or "-h" in argv or "--help" in argv:
+  if len(argv) <= 1 or "-h" in argv or "--help" in argv:
     usage()
     sys.exit(1)
-  while True:
-    if len(argv) == 1:
-      # output
-      output = argv[0]
-      break
-    else:
-      option = argv[0]
-      option_arg = argv[1]
-      if option == "-m":
-        movie_convert_tasks.append(MovieConvertTask(option_arg))
-        movie_files.append(movie_convert_tasks[-1].output)
-      elif option == "-c":
-        image_generate_tasks.append(ImageGenerateTask(option_arg))
-        movie_generate_tasks.append(MovieGenerateTask(
-          image_generate_tasks[-1].output))
-        movie_files.append(movie_generate_tasks[-1].output)
-      elif option == "-i":
-        movie_generate_tasks.append(MovieGenerateTask(option_arg))
-        movie_files.append(movie_generate_tasks[-1].output)
-      argv = argv[2:]
-  pool = Pool(8)
-  pool.map(runWrap, image_generate_tasks)
-  pool.map(runWrap, movie_generate_tasks)
-  pool.map(runWrap, movie_convert_tasks)
+  elif argv[0] == "--config":                        #read from config
+    params = loadYaml(argv[1])
+    output = argv[2]
+  else:                                       # read from command line
+    params = []
+    while True:
+      if len(argv) == 1:
+        # output
+        output = argv[0]
+        break
+      else:
+        option = argv[0]
+        option_arg = argv[1]
+        if option == "-m":
+          params.append({"type": "movie", "input": option_arg})
+        elif option == "-i":
+          params.append({"type": "image", "input": option_arg})
+        elif option == "-c":
+          params.append({"type": "string", "string": option_arg})
+        argv = argv[2:]
+  configs = [Config(p["type"], p) for p in params]
+  tasks = flatten([c.generateTasks() for c in configs])
+  movie_convert_tasks = [t for t in tasks if isinstance(t, MovieConvertTask)]
+  image_generate_tasks = [t for t in tasks if isinstance(t, ImageGenerateTask)]
+  movie_generate_tasks = [t for t in tasks if isinstance(t, MovieGenerateTask)]
+  movie_files = [t.output for t in tasks]
+  [t.run() for t in image_generate_tasks]
+  [t.run() for t in movie_generate_tasks]
+  [t.run() for t in movie_convert_tasks]
   if os.path.exists(output):
-    os.remove(output)
+    if queryYesNo("remove %s?" % (output)):
+      os.remove(output)
   command = "cat %s | ffmpeg -f mpeg -i - -sameq -vcodec mpeg4 %s" % (" ".join(movie_files), output)
   subprocess.check_call(["sh", "-c", command])
   

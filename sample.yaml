@@ -1,0 +1,14 @@
+- type: string
+  string: "This is a sample for ffmpeg_movie_builder.py"
+- type: string
+  string: "1"
+- type: movie
+  input: ~/tmp/1.mov
+- type: string
+  string: "2"
+- type: movie
+  input: ~/tmp/2.mov
+- type: string
+  string: "3"
+- type: movie
+  input: ~/tmp/3.mov
