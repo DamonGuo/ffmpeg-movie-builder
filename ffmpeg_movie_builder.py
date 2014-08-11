@@ -135,6 +135,9 @@ class MovieConvertTask(Task):
                "-r", "30",
                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
                self.output]
+    if ffmpeg_quiet:
+      command.append("-loglevel")
+      command.append("quiet")
     print green("converting movie to mpg: %s -> %s" % (self.input, self.output))
     self.exec_command(command)
     
@@ -162,6 +165,9 @@ class MovieGenerateTask(Task):
                 "-i", self.output_prefix + "_%d.png",
                 "-sameq",
                 self.output]
+    if ffmpeg_quiet:
+      command2.append("-loglevel")
+      command2.append("quiet")
     print green("generating movie from images: -> %s"
                 % (self.output))
     self.exec_command(command2)
@@ -217,6 +223,7 @@ def loadYaml(yaml_file):
     raise Exception(message)
 
 def main():
+  global ffmpeg_quiet
   argv = sys.argv[1:]
   # parse argv in the order
   movie_files = []
@@ -227,7 +234,21 @@ def main():
   if len(argv) <= 1 or "-h" in argv or "--help" in argv:
     usage()
     sys.exit(1)
-  elif argv[0] == "--config":                        #read from config
+  else:                                   #process global config
+    if "--ffmpeg-quiet" in argv:
+      ffmpeg_quiet = True
+      argv.remove("--ffmpeg-quiet")
+    else:
+      ffmpeg_quiet = False
+    if "-y" in argv:
+      force_to_yes = True
+      argv.remove("-y")
+    elif  "--yes" in argv:
+      force_to_yes = True
+      argv.remove("--yes")
+    else:
+      force_to_yes = False
+  if argv[0] == "--config":                        #read from config
     params = loadYaml(argv[1])
     output = argv[2]
   else:                                       # read from command line
@@ -257,10 +278,12 @@ def main():
   [t.run() for t in movie_generate_tasks]
   [t.run() for t in movie_convert_tasks]
   if os.path.exists(output):
-    if queryYesNo("remove %s?" % (output)):
+    if force_to_yes or queryYesNo("remove %s?" % (output)):
       os.remove(output)
   command = "cat %s | ffmpeg -f mpeg -i - -sameq -vcodec mpeg4 %s" % (" ".join(movie_files), output)
+  if ffmpeg_quiet:
+    command = command + " -loglevel quiet"
   subprocess.check_call(["sh", "-c", command])
-  
+  print green("done, check out %s" % (output))
 if __name__ == "__main__":
   main()
