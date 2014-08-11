@@ -1,8 +1,17 @@
 #!/usr/bin/env python
+
+__doc__ = """
+a script to generate and concatenate movies with titles.
+"""
+
+from multiprocessing import Pool
+import argparse
 import subprocess
 import os, sys
 import tempfile
 
+###########################################################
+# utility function to colorize terminal output
 def getcolor(colorname):
     colors = {
         'clear': '\033[0m',
@@ -28,16 +37,27 @@ blue   = getcolor('blue')
 purple = getcolor('purple')
 cyan   = getcolor('cyan')
 white  = getcolor('white')
+############################################################
+
+def generateParser():
+  parser = argparse.ArgumentParser(
+    "a script to generate and concatenate movies with titles")
+  return parser
+  
 
 class Task():
   def run(self):
     pass
   def exec_command(self, commands):
+    print cyan("[%s]" % " ".join(commands))
     subprocess.check_call(commands)
 
 class ImageGenerateTask(Task):
+  """
+  Generate an image from caption string
+  """
   def __init__(self, text, 
-               size="640x480",
+               size="1024x768",
                background="black",
                font="Dejavu-Sans-Book",
                foreground="white",
@@ -63,51 +83,63 @@ class ImageGenerateTask(Task):
     self.exec_command(command)
 
 class MovieConvertTask(Task):
+  """
+  a task to convert movie to mpeg1 movie
+  """
   def __init__(self, input):
     self.input = input
-    self.output = tempfile.mktemp(".mp4")
+    self.output = tempfile.mktemp(".mpg")
   def run(self):
-    command = ["ffmpeg", "-loglevel", "quiet",
+    command = ["ffmpeg",
                "-i", self.input,
-               "-q:a", "1",
-               "-q:v", "1",
+               "-sameq",
+               # "-q:a", "1",
+               # "-q:v", "1",
+               "-r", "30",
                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
                self.output]
-    print green("converting movie to mp4: %s -> %s" % (self.input, self.output))
+    print green("converting movie to mpg: %s -> %s" % (self.input, self.output))
     self.exec_command(command)
     
 class MovieGenerateTask(Task):
+  """
+  a task to generate a movie from an image.
+  """
   def __init__(self, input, duration = 4.0):
     self.output_prefix = tempfile.mktemp()
     self.input = input
     # png...?
-    self.mid_image0 = self.output_prefix + "_0.png"
-    self.mid_image1 = self.output_prefix + "_1.png"
-    self.output = self.output_prefix + ".mp4"
+    self.mid_images = [self.output_prefix + ("_%d.png" % (i)) 
+                       for i in range(int(duration * 30))]
+    self.output = self.output_prefix + ".mpg"
     self.duration = duration
   def run(self):
-    command0 = ["convert", self.input,
-                "-quality", "0",
-                self.mid_image0]
-    command1 = ["convert", self.input,
-                "-quality", "0",
-                self.mid_image1]
+    for mid_image in self.mid_images:
+      command = ["convert", self.input,
+                 "-quality", "0",
+                 mid_image]
+      print green("copying image: %s -> %s" % (self.input, mid_image))
+      self.exec_command(command)
     command2 = ["ffmpeg",
-                "-loglevel", "quiet",
-                "-r", str(1.0 / self.duration),
+                "-r", "30",
                 "-i", self.output_prefix + "_%d.png",
+                "-sameq",
                 self.output]
-    print green("copying image: %s -> %s" % (self.input, self.mid_image0))
-    self.exec_command(command0)
-    print green("copying image: %s -> %s" % (self.input, self.mid_image1))
-    self.exec_command(command1)
-    print green("generating movie from two images: (%s, %s) -> %s"
-                % (self.mid_image0, self.mid_image1, self.output))
+    print green("generating movie from images: -> %s"
+                % (self.output))
     self.exec_command(command2)
     
 def usage():
   print "ffmpeg_builder.py [-m|c|i] arg0 [-m|c|i] arg1 ... output"
 
+def runWrap(obj):
+  """
+  a function to wrap Task.run method to call from
+  Pool.map
+  """
+  return obj.run()
+
+  
 def main():
   argv = sys.argv[1:]
   # parse argv in the order
@@ -115,6 +147,10 @@ def main():
   image_generate_tasks = []               #string -> image
   movie_generate_tasks = []               #image -> movie
   movie_convert_tasks = []
+  # check args
+  if len(argv) <= 1 or len(argv) % 2 == 0 or "-h" in argv or "--help" in argv:
+    usage()
+    sys.exit(1)
   while True:
     if len(argv) == 1:
       # output
@@ -127,7 +163,7 @@ def main():
         movie_convert_tasks.append(MovieConvertTask(option_arg))
         movie_files.append(movie_convert_tasks[-1].output)
       elif option == "-c":
-        image_generate_tasks.append(ImageGenerateTask("hello world"))
+        image_generate_tasks.append(ImageGenerateTask(option_arg))
         movie_generate_tasks.append(MovieGenerateTask(
           image_generate_tasks[-1].output))
         movie_files.append(movie_generate_tasks[-1].output)
@@ -135,14 +171,14 @@ def main():
         movie_generate_tasks.append(MovieGenerateTask(option_arg))
         movie_files.append(movie_generate_tasks[-1].output)
       argv = argv[2:]
-  for i in image_generate_tasks:
-    i.run()
-  for i in movie_generate_tasks:
-    i.run()
-  for i in movie_convert_tasks:
-    i.run()
-  command = ["mmcat"] + movie_files + [output]
-  print " ".join(command)
-  # subprocess.check_call(command)
+  pool = Pool(8)
+  pool.map(runWrap, image_generate_tasks)
+  pool.map(runWrap, movie_generate_tasks)
+  pool.map(runWrap, movie_convert_tasks)
+  if os.path.exists(output):
+    os.remove(output)
+  command = "cat %s | ffmpeg -f mpeg -i - -sameq -vcodec mpeg4 %s" % (" ".join(movie_files), output)
+  subprocess.check_call(["sh", "-c", command])
+  
 if __name__ == "__main__":
   main()
