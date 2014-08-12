@@ -94,11 +94,11 @@ class ImageGenerateTask(Task):
   Generate an image from caption string
   """
   def __init__(self, text, 
-               size="1024x768",
-               background="black",
-               font="Dejavu-Sans-Book",
-               foreground="white",
-               pointsize="30"):
+               size,
+               background,
+               font,
+               foreground,
+               pointsize):
     self.output = tempfile.mktemp(".png")
     self.text = text
     self.size = size
@@ -145,7 +145,7 @@ class MovieGenerateTask(Task):
   """
   a task to generate a movie from an image.
   """
-  def __init__(self, input, duration = 4.0):
+  def __init__(self, input, duration):
     self.output_prefix = tempfile.mktemp()
     self.input = input
     # png...?
@@ -187,12 +187,23 @@ class Config():
   def __init__(self, config_type, args):
     self.config_type = config_type
     self.args = args
+  def getParamValue(self, name, default):
+    if self.args.has_key(name):
+      return self.args[name]
+    else:
+      return default
   def generateTasks(self):
     if self.config_type == "movie":
       return [MovieConvertTask(os.path.expanduser(self.args["input"]))]
     elif self.config_type == "string":
-      image_task = ImageGenerateTask(os.path.expanduser(self.args["string"]))
-      movie_task = MovieGenerateTask(image_task.output)
+      image_task = ImageGenerateTask(self.args["string"],
+                                     self.getParamValue("size", "1024x768"),
+                                     self.getParamValue("background", "black"),
+                                     self.getParamValue("font", "Dejavu-Sans-Book"),
+                                     self.getParamValue("foreground", "white"),
+                                     self.getParamValue("pointsize", "30"))
+      movie_task = MovieGenerateTask(image_task.output,
+                                     self.getParamValue("duration", 4.0))
       return [image_task, movie_task]
     elif self.config_type == "image":
       movie_task = MovieGenerateTask(os.path.expanduser(self.args["input"]))
