@@ -12,6 +12,12 @@ insert titles.
 How to use
 ----------
 
+### command line
 ```sh
-$ ./ffmpeg_movie_builder.py --config sample.yaml output.mp4
+$ ffmpeg_movie_builder.py -c hello -c world -m foo.mp4 -c "next movie" -m bar.mp4 output.mp4
+```
+
+### use configuration file
+```sh
+$ ffmpeg_movie_builder.py --config sample.yaml output.mp4
 ```
