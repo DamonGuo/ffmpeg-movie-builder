@@ -1,0 +1,30 @@
+- type: string
+  string: "This is a sample for\nffmpeg_movie_builder.py"
+  background: "#f6c003"
+  foreground: "black"
+  pointsize: "50"
+  font: "IPAGothic Bold"
+- type: string
+  string: "1"
+  background: "#f6c003"
+  foreground: "black"
+  pointsize: "50"
+  duration: 2
+- type: movie
+  input: ~/tmp/1.mov
+- type: string
+  string: "2"
+  background: "#f6c003"
+  foreground: "black"
+  pointsize: "50"
+  duration: 2
+- type: movie
+  input: ~/tmp/2.mov
+- type: string
+  string: "3"
+  background: "#f6c003"
+  foreground: "black"
+  pointsize: "50"
+- type: movie
+  input: ~/tmp/3.mov
+  duration: 2
