@@ -8,6 +8,7 @@ import argparse
 import subprocess
 import os, sys
 import tempfile
+import re
 
 ###########################################################
 # utility function to colorize terminal output
@@ -80,7 +81,13 @@ def generateParser():
   parser = argparse.ArgumentParser(
     "a script to generate and concatenate movies with titles")
   return parser
-  
+
+def getMovieWidth(movie):
+  output = subprocess.check_output(["ffprobe", "-show_streams", movie])
+  return int(re.compile('.*width=([\d]+).*', re.DOTALL).match(output).group(1))
+def getMovieHeight(movie):
+  output = subprocess.check_output(["ffprobe", "-show_streams", movie])
+  return int(re.compile('.*height=([\d]+).*', re.DOTALL).match(output).group(1))  
 
 class Task():
   def run(self):
@@ -282,6 +289,7 @@ def main():
   configs = [Config(p["type"], p) for p in params]
   tasks = flatten([c.generateTasks() for c in configs])
   movie_convert_tasks = [t for t in tasks if isinstance(t, MovieConvertTask)]
+  
   image_generate_tasks = [t for t in tasks if isinstance(t, ImageGenerateTask)]
   movie_generate_tasks = [t for t in tasks if isinstance(t, MovieGenerateTask)]
   movie_files = [t.output for t in tasks]
